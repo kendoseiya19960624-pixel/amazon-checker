@@ -601,12 +601,76 @@ document.getElementById('urlClear').addEventListener('click',()=>{
   document.getElementById('urlInput').value='';renderProduct();
 });
 
+/* ===== 外部データの自動取り込み（Chrome拡張連携） ===== */
+function hasInput(data,type){
+  if(['titlelen','titlespace','bulletcount','bulletlen'].includes(type)) return !!(data.text&&data.text.trim());
+  if(['pixel','subimg','aplus','rating'].includes(type)) return data.num!=null && data.num!=='' && !isNaN(parseFloat(data.num));
+  return false;
+}
+function ingest(obj){
+  ITEMS.forEach((it,i)=>{
+    switch(it.type){
+      case 'titlelen': case 'titlespace':
+        if(obj.title!=null) state[i].data.text=obj.title; break;
+      case 'bulletcount': case 'bulletlen':
+        if(Array.isArray(obj.bullets)&&obj.bullets.length) state[i].data.text=obj.bullets.join('\n'); break;
+      case 'subimg':
+        if(obj.subImageCount!=null) state[i].data.num=String(obj.subImageCount); break;
+      case 'aplus':
+        if(obj.aplusModules!=null) state[i].data.num=String(obj.aplusModules); break;
+      case 'rating':
+        if(obj.rating!=null) state[i].data.num=String(obj.rating); break;
+      case 'pixel':
+        if(obj.mainImageLongPx!=null) state[i].data.num=String(obj.mainImageLongPx); break;
+    }
+  });
+  // 自動判定できた項目はOK/NGを自動セット
+  let filled=0;
+  ITEMS.forEach((it,i)=>{
+    if(AUTO_TYPES.includes(it.type)&&hasInput(state[i].data,it.type)){
+      const r=AUTO[it.type](state[i].data);
+      if(r&&typeof r.ok==='boolean'){state[i].status=r.ok?'ok':'ng';filled++;}
+    }
+  });
+  if(obj.asin){meta.asin=obj.asin;meta.host=obj.host||'www.amazon.co.jp';meta.url=obj.url||('https://'+(obj.host||'www.amazon.co.jp')+'/dp/'+obj.asin);saveMeta();}
+  save();
+  return filled;
+}
+function decodeData(b64){
+  try{return JSON.parse(decodeURIComponent(escape(window.atob(b64))));}catch(e){return null;}
+}
+function showBanner(msg,ok){
+  let b=document.getElementById('ingestBanner');
+  if(!b){b=document.createElement('div');b.id='ingestBanner';
+    b.style.cssText='position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:99;'
+      +'background:'+(ok?'#143d2b':'#3d1f22')+';color:'+(ok?'#27c281':'#ef8b94')+';'
+      +'border:1px solid '+(ok?'#27c281':'#ef4d5a')+';padding:11px 18px;border-radius:10px;'
+      +'font-size:13.5px;font-weight:700;box-shadow:0 8px 30px rgba(0,0,0,.4)';
+    document.body.appendChild(b);}
+  b.textContent=msg;
+  setTimeout(()=>{if(b)b.style.transition='opacity .5s';b.style.opacity='0';setTimeout(()=>b&&b.remove(),600);},5000);
+}
+function checkIncoming(){
+  const h=location.hash||'';
+  const m=h.match(/[#&]data=([^&]+)/);
+  if(!m) return;
+  const obj=decodeData(m[1]);
+  history.replaceState(null,'',location.pathname+location.search); // URLをクリーンに
+  if(!obj){showBanner('⚠ 受け取ったデータを読み取れませんでした',false);return;}
+  const n=ingest(obj);
+  render();
+  document.getElementById('urlInput').value=meta.url||'';
+  renderProduct();
+  showBanner('✅ Amazonページから自動入力しました（'+n+'項目を自動判定）',true);
+}
+
 /* ===== 起動 ===== */
 loadMeta();
 load();
 render();
 document.getElementById('urlInput').value = meta.url || '';
 renderProduct();
+checkIncoming();
 </script>
 </body>
 </html>
