@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amazon商品ページ 評価チェッカー（60点満点）</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d2129; --line:#2a2f3a;
+    --txt:#e8eaed; --sub:#9aa3b2; --muted:#6b7280;
+    --amazon:#ff9900; --amazon2:#febd69; --link:#4ea1ff;
+    --ok:#27c281; --ng:#ef4d5a; --warn:#f5a623; --na:#8a93a4;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;
+    line-height:1.6;}
+  a{color:var(--link);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1080px;margin:0 auto;padding:24px 16px 80px}
+
+  header.app{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+  .logo{font-weight:800;font-size:22px;letter-spacing:.2px}
+  .logo b{color:var(--amazon)}
+  .tag{font-size:12px;color:var(--sub);background:var(--panel);border:1px solid var(--line);
+    padding:3px 10px;border-radius:999px}
+  .lead{color:var(--sub);font-size:13.5px;margin:4px 0 18px}
+
+  /* score bar */
+  .scorebar{position:sticky;top:0;z-index:30;background:rgba(15,17,21,.92);
+    backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px 18px;display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;margin-bottom:22px}
+  .ring{--p:0;width:84px;height:84px;border-radius:50%;
+    background:conic-gradient(var(--ringcol,var(--amazon)) calc(var(--p)*1%), #2a2f3a 0);
+    display:grid;place-items:center;position:relative}
+  .ring::before{content:"";position:absolute;inset:8px;border-radius:50%;background:var(--panel)}
+  .ring .val{position:relative;text-align:center;line-height:1.1}
+  .ring .val b{font-size:22px}
+  .ring .val span{font-size:11px;color:var(--sub);display:block}
+  .scoremeta{min-width:0}
+  .scoremeta .big{font-size:15px;font-weight:700}
+  .scoremeta .row{display:flex;gap:18px;flex-wrap:wrap;color:var(--sub);font-size:12.5px;margin-top:4px}
+  .scoremeta .row b{color:var(--txt)}
+  .grade{font-size:13px;padding:6px 14px;border-radius:999px;font-weight:700;white-space:nowrap}
+  .progress{height:8px;border-radius:6px;background:#2a2f3a;overflow:hidden;margin-top:10px}
+  .progress>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--amazon),var(--amazon2));transition:width .3s}
+
+  /* product url box */
+  .producthead{background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:18px}
+  .ph-label{font-size:12.5px;color:var(--sub);margin-bottom:9px;display:flex;align-items:center;gap:8px}
+  .ph-label b{color:var(--amazon2)}
+  .ph-row{display:flex;gap:10px;flex-wrap:wrap}
+  .urlbox{flex:1;min-width:240px;background:#0e1016;border:1px solid var(--line);color:var(--txt);
+    border-radius:10px;padding:11px 13px;font-size:13.5px;font-family:inherit}
+  .urlbox:focus{outline:none;border-color:var(--amazon)}
+  .ph-info{margin-top:13px;background:#0e1016;border:1px solid var(--line);border-radius:10px;
+    padding:12px 14px;font-size:13px}
+  .ph-info .asin{font-weight:800;color:var(--amazon2);letter-spacing:.5px}
+  .ph-info .links{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+  .ph-info .links a{background:var(--panel2);border:1px solid var(--line);padding:6px 12px;
+    border-radius:999px;font-size:12.5px;color:var(--link)}
+  .ph-info .links a:hover{border-color:var(--amazon);text-decoration:none}
+  .ph-info .warn-msg{color:var(--ng);font-weight:700}
+  .ph-info .mkt{font-size:11.5px;color:var(--muted);margin-top:8px}
+
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+  .btn{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+    padding:9px 14px;border-radius:10px;font-size:13px;cursor:pointer;transition:.15s}
+  .btn:hover{border-color:var(--amazon);color:var(--amazon2)}
+  .btn.primary{background:var(--amazon);color:#1a1300;border-color:var(--amazon);font-weight:700}
+  .btn.primary:hover{background:var(--amazon2);color:#1a1300}
+
+  .cat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    margin-bottom:14px;overflow:hidden}
+  .cat>summary{list-style:none;cursor:pointer;padding:14px 18px;display:flex;align-items:center;gap:12px;
+    user-select:none}
+  .cat>summary::-webkit-details-marker{display:none}
+  .cat>summary .chev{color:var(--sub);transition:.2s;font-size:13px}
+  .cat[open]>summary .chev{transform:rotate(90deg)}
+  .cat .cname{font-weight:700;font-size:15px}
+  .cat .cmini{margin-left:auto;font-size:12px;color:var(--sub);display:flex;align-items:center;gap:8px}
+  .pill{font-size:11px;padding:2px 9px;border-radius:999px;background:var(--panel2);border:1px solid var(--line)}
+
+  .item{padding:14px 18px;border-top:1px solid var(--line);display:flex;gap:14px;align-items:flex-start}
+  .item .seg{display:flex;flex-direction:column;gap:4px;align-items:center;padding-top:2px}
+  .item .num{font-size:11px;color:var(--muted)}
+  .stbtn{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);
+    cursor:pointer;display:grid;place-items:center;font-size:15px;color:var(--sub);transition:.12s}
+  .stbtn:hover{border-color:var(--amazon)}
+  .item.ok .stbtn{background:rgba(39,194,129,.15);border-color:var(--ok);color:var(--ok)}
+  .item.ng .stbtn{background:rgba(239,77,90,.12);border-color:var(--ng);color:var(--ng)}
+  .item.na .stbtn{background:rgba(138,147,164,.12);border-color:var(--na);color:var(--na)}
+  .item .body{flex:1;min-width:0}
+  .item .q{font-size:14px}
+  .item .auto{margin-top:8px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .item .auto .lbl{font-size:12px;color:var(--sub);margin-bottom:6px}
+  .auto textarea,.auto input[type=text],.auto input[type=number]{
+    width:100%;background:#0e1016;border:1px solid var(--line);color:var(--txt);
+    border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical}
+  .auto textarea{min-height:60px}
+  .auto .mini{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12px}
+  .verdict{font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}
+  .verdict.ok{background:rgba(39,194,129,.16);color:var(--ok)}
+  .verdict.ng{background:rgba(239,77,90,.16);color:var(--ng)}
+  .verdict.warn{background:rgba(245,166,35,.16);color:var(--warn)}
+  .verdict.idle{background:var(--panel);color:var(--muted)}
+  .applybtn{font-size:11px;padding:4px 9px;border-radius:7px;border:1px solid var(--line);
+    background:var(--panel);color:var(--sub);cursor:pointer}
+  .applybtn:hover{border-color:var(--amazon);color:var(--amazon2)}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:6px}
+  .note-in{width:100%;background:#0e1016;border:1px dashed var(--line);color:var(--sub);
+    border-radius:8px;padding:6px 9px;font-size:12px;margin-top:8px;font-family:inherit}
+  .badge-auto{font-size:10px;background:rgba(78,161,255,.14);color:var(--link);border:1px solid rgba(78,161,255,.3);
+    padding:1px 7px;border-radius:999px;margin-left:6px}
+  .badge-manual{font-size:10px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);
+    padding:1px 7px;border-radius:999px;margin-left:6px}
+
+  .ref{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-top:24px}
+  .ref h3{margin:0 0 10px;font-size:15px}
+  .ref ul{margin:0;padding-left:18px;font-size:13px;color:var(--sub)}
+  .ref li{margin:6px 0}
+  .foot{color:var(--muted);font-size:11.5px;text-align:center;margin-top:26px}
+
+  @media(max-width:640px){
+    .scorebar{grid-template-columns:auto 1fr;gap:12px}
+    .grade{grid-column:1/-1;justify-self:start}
+  }
+  @media print{
+    body{background:#fff;color:#000}
+    .toolbar,.scorebar{position:static}
+    .cat,.ref{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="app">
+    <div class="logo">Amazon商品ページ <b>評価チェッカー</b></div>
+    <span class="tag">全31項目 / 60点満点</span>
+  </header>
+  <p class="lead">
+    Amazonの商品ページを「60点チェックリスト」で評価するツールです。
+    <span style="color:var(--link)">青バッジ＝自動判定</span>（値を入力するとOK/NGを自動採点）、
+    <span style="color:var(--muted)">灰バッジ＝目視確認</span>（ページを見てボタンで評価）。
+    ボタンを押すたびに上部スコアが更新されます。入力内容はこのブラウザに自動保存されます。
+  </p>
+
+  <div class="producthead">
+    <div class="ph-label">🔗 <b>評価する商品のURL</b>を貼り付け（AmazonのページURL または ASIN）</div>
+    <div class="ph-row">
+      <input type="text" id="urlInput" class="urlbox" placeholder="例：https://www.amazon.co.jp/dp/B0XXXXXXXX  または  B0XXXXXXXX">
+      <button class="btn primary" id="urlGo">読み込む</button>
+      <button class="btn" id="urlClear">クリア</button>
+    </div>
+    <div class="ph-info" id="phInfo" style="display:none"></div>
+  </div>
+
+  <div class="scorebar">
+    <div class="ring" id="ring"><div class="val"><b id="ringScore">0</b><span>/ 60点</span></div></div>
+    <div class="scoremeta">
+      <div class="big" id="gradeText">未評価</div>
+      <div class="row">
+        <span>達成 <b><span id="okCount">0</span>/31</b> 項目</span>
+        <span>NG <b id="ngCount">0</b></span>
+        <span>未評価 <b id="idleCount">31</b></span>
+        <span>対象外 <b id="naCount">0</b></span>
+      </div>
+      <div class="progress"><i id="progBar"></i></div>
+    </div>
+    <span class="grade" id="gradePill" style="background:#2a2f3a;color:var(--sub)">—</span>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn primary" onclick="window.print()">📄 結果を印刷 / PDF保存</button>
+    <button class="btn" id="allokBtn">全項目を一括OK</button>
+    <button class="btn" id="resetBtn">リセット</button>
+    <button class="btn" id="copyBtn">📋 サマリーをコピー</button>
+  </div>
+
+  <div id="list"></div>
+
+  <div class="ref">
+    <h3>📚 参考資料・規約メモ（スプレッドシート由来）</h3>
+    <ul>
+      <li><b>検索キーワード</b>：最大500バイト（約166文字）まで。ファッションカテゴリは250バイト（約83文字）。商品名・箇条書き・検索KWは横断参照されるため、商品名に含むKWの再入力は不要（重複を避け新KWを入れる）。</li>
+      <li><b>規約違反キーワード</b>：他社ブランドの無断使用（商標侵害）／ASINを含むKW／誇張表現（最高・世界一・No.1等の一時的・主観的表現）／医療効果の暗示（薬機法）／宗教・性的・政治的にセンシティブな内容／レビュー操作・誘導表現。</li>
+      <li><b>商品名</b>：スペース含む200文字以内（2025/7/25以降は75文字以内）。スペースは全て半角。</li>
+      <li><b>禁止されている商品広告・宣伝文言</b>：<a href="https://sellercentral-japan.amazon.com/help/hub/reference/G202024200" target="_blank" rel="noopener">セラーセントラル ヘルプ G202024200</a></li>
+      <li><b>カテゴリ規約（商品名等）</b>：<a href="https://sellercentral.amazon.co.jp/help/hub/reference/GYTR6SYGFA5E3EQC" target="_blank" rel="noopener">GYTR6SYGFA5E3EQC</a> / <a href="https://sellercentral.amazon.co.jp/help/hub/reference/G1881" target="_blank" rel="noopener">G1881</a></li>
+      <li><b>規約に準じた記述の詳細</b>：<a href="https://sellercentral.amazon.co.jp/help/hub/reference/GX5L8BF8GLMML6CX" target="_blank" rel="noopener">GX5L8BF8GLMML6CX</a></li>
+    </ul>
+    <p class="hint">※ チェック項目の内容は、Amazonの仕様変更・運営方法などによって変更される場合があります。</p>
+  </div>
+
+  <p class="foot">
+    Amazon商品ページ 評価チェッカー ｜ ローカル動作（データは外部送信されません）<br>
+    自動取得不可項目（在庫・バックエンドKW・ブランド登録状況・ストア階層等）は目視で評価してください。
+  </p>
+</div>
+
+<script>
+/* ===== チェック項目定義（スプレッドシート 全31項目） ===== */
+const ITEMS = [
+  {cat:"在庫管理", q:"在庫が定めた数確保されているか、または在庫薄の場合対応はできているか", type:"manual"},
+
+  {cat:"検索キーワード対応", q:"有効バイト数まで設定できているか（項目を増やしても最大500バイトのまま）", type:"kwbytes"},
+  {cat:"検索キーワード対応", q:"重複キーワードの確認ができているか", type:"kwdup"},
+  {cat:"検索キーワード対応", q:"規約違反キーワードは使用していないか", type:"kwbanned"},
+
+  {cat:"商品名", q:"カテゴリ規約に準じた並び順での設定ができているか", type:"manual"},
+  {cat:"商品名", q:"スペース含む200文字以内（2025/7/25以降は75文字以内）で登録できているか", type:"titlelen"},
+  {cat:"商品名", q:"スペースは全て半角で活用できているか", type:"titlespace"},
+
+  {cat:"商品の仕様（箇条書き）", q:"商品メリットの記述ができているか", type:"manual"},
+  {cat:"商品の仕様（箇条書き）", q:"箇条書き（5個以上）をすべて記載しているか", type:"bulletcount"},
+  {cat:"商品の仕様（箇条書き）", q:"規約に準じた記述になっているか", type:"manual"},
+  {cat:"商品の仕様（箇条書き）", q:"3項目目までに訴求力の高い記述になっているか", type:"manual"},
+  {cat:"商品の仕様（箇条書き）", q:"1項目100文字以内の長すぎない記述になっているか", type:"bulletlen"},
+
+  {cat:"メイン画像", q:"横に並べる画像サイズは統一できているか", type:"manual"},
+  {cat:"メイン画像", q:"カテゴリ規約に準じた画像になっているか", type:"manual"},
+  {cat:"メイン画像", q:"長辺1500pixel以上になっているか（ズーム機能対応）", type:"pixel"},
+
+  {cat:"サブ画像", q:"サブ画像を6枚以上登録できているか", type:"subimg"},
+  {cat:"サブ画像", q:"利用イメージの伝わる画像になっているか", type:"manual"},
+  {cat:"サブ画像", q:"画像内の文字の大きさは見えにくくないか（スマホ対応）", type:"manual"},
+
+  {cat:"商品紹介コンテンツ（A+）", q:"モジュールを複数（最大7個）設定できているか", type:"aplus"},
+  {cat:"商品紹介コンテンツ（A+）", q:"画像だけではなくテキストでの訴求もできているか", type:"manual"},
+
+  {cat:"ブランド名", q:"ブランド名の統一ができているか", type:"manual"},
+
+  {cat:"ブラウズノード設定", q:"商品に合わせたブラウズノードの設定ができているか", type:"manual"},
+  {cat:"ブラウズノード設定", q:"ブラウズノードを最下層まで選択できているか", type:"manual"},
+
+  {cat:"バリエーション設定", q:"バリエーションの設定ができているか（必要であれば）", type:"manual", naAllowed:true},
+
+  {cat:"評価・レビュー対応", q:"出品者評価の★3以下削除（依頼）ができているか", type:"manual"},
+  {cat:"評価・レビュー対応", q:"商品レビュー★4以上をキープしているか（できない場合は対策済か）", type:"rating"},
+
+  {cat:"Amazonブランド登録", q:"Amazonブランド登録が完了しているか", type:"manual"},
+
+  {cat:"Amazonストア", q:"Amazonストアの設定ができているか", type:"manual"},
+  {cat:"Amazonストア", q:"1階層目だけではなく、2階層目も設定できているか", type:"manual"},
+  {cat:"Amazonストア", q:"1階層目から2階層目へ推移しやすくバナー設定などされているか", type:"manual"},
+  {cat:"Amazonストア", q:"階層名はわかりやすく表記されているか", type:"manual"},
+];
+
+const TOTAL = ITEMS.length;            // 31
+const FULL = 60;                       // 満点
+const PER = FULL / TOTAL;              // 1項目あたりの配点
+
+const STORE_KEY = "amzPageChecker_v1";
+let state = {};   // idx -> {status:'idle|ok|ng|na', note:'', data:{}}
+ITEMS.forEach((_,i)=> state[i] = {status:'idle', note:'', data:{}});
+
+/* ===== 自動判定ロジック ===== */
+function utf8bytes(s){return new (typeof TextEncoder!=='undefined'?TextEncoder:Object)().encode?new TextEncoder().encode(s).length:unescape(encodeURIComponent(s)).length;}
+function byteLen(s){return new TextEncoder().encode(s).length;}
+
+const BANNED = [
+  {re:/(最高|最強|世界一|日本一|業界一|No\.?\s?1|ナンバーワン|一番|断トツ|完全|絶対|永久|半永久)/i, label:"誇張・最上級表現"},
+  {re:/(激安|最安|破格|大幅値下げ|限定セール|今だけ|期間限定|送料無料|ポイント)/i, label:"価格/プロモ表現（商品名NG）"},
+  {re:/(治る|治療|効く|効果|改善|予防|医薬|診断|症状|痛みが取れる|デトックス|アンチエイジング)/i, label:"医療・薬機法の疑い"},
+  {re:/(B0[0-9A-Z]{8})/, label:"ASINを含む"},
+  {re:/(レビュー特典|高評価で|星5|☆5|口コミ投稿で)/i, label:"レビュー誘導"},
+];
+
+const AUTO = {
+  kwbytes(v){
+    const fashion = v.fashion;
+    const limit = fashion?250:500;
+    const b = byteLen(v.text||"");
+    const ratio = Math.round(b/limit*100);
+    let cls='warn', msg=`${b} / ${limit} バイト（使用率${ratio}%）`;
+    if(b===0){return {cls:'idle',msg:'KWを入力すると判定します'};}
+    if(b>limit){cls='ng';msg=`${b} / ${limit} バイト 超過！ ${b-limit}バイト削減が必要`;}
+    else if(ratio>=80){cls='ok';msg=`${b} / ${limit} バイト（${ratio}%）— 有効バイトをよく活用`;}
+    else {cls='warn';msg=`${b} / ${limit} バイト（${ratio}%）— あと${limit-b}バイト活用余地`;}
+    return {cls,msg, ok:(b<=limit && ratio>=80)};
+  },
+  kwdup(v){
+    const raw=(v.text||"").split(/[\s,、　]+/).map(x=>x.trim().toLowerCase()).filter(Boolean);
+    if(!raw.length) return {cls:'idle',msg:'KWを入力すると重複を検出します'};
+    const seen={},dups=new Set();
+    raw.forEach(w=>{seen[w]=(seen[w]||0)+1; if(seen[w]>1)dups.add(w);});
+    if(dups.size) return {cls:'ng',msg:`重複 ${dups.size}件： ${[...dups].join(' / ')}`, ok:false};
+    return {cls:'ok',msg:`重複なし（${raw.length}語）`, ok:true};
+  },
+  kwbanned(v){
+    const t=v.text||"";
+    if(!t) return {cls:'idle',msg:'KW/商品名を入力すると規約違反語を検出します'};
+    const hits=[];
+    BANNED.forEach(b=>{const m=t.match(b.re); if(m)hits.push(`「${m[0]}」(${b.label})`);});
+    if(hits.length) return {cls:'ng',msg:`要確認 ${hits.length}件： ${hits.join(' / ')}`, ok:false};
+    return {cls:'ok',msg:'明らかな違反語は検出されませんでした（最終目視推奨）', ok:true};
+  },
+  titlelen(v){
+    const t=v.text||"";const n=[...t].length;
+    if(!n) return {cls:'idle',msg:'商品名を入力すると文字数を判定します'};
+    const limit=75;
+    if(n>limit) return {cls:'ng',msg:`${n}文字 — 上限75文字を ${n-limit}文字 超過`, ok:false};
+    if(n>200) return {cls:'ng',msg:`${n}文字 — 旧上限200も超過`, ok:false};
+    return {cls:'ok',msg:`${n}文字 / 75（旧基準200）以内 OK`, ok:true};
+  },
+  titlespace(v){
+    const t=v.text||"";
+    if(!t) return {cls:'idle',msg:'商品名を入力すると全角スペースを検出します'};
+    const cnt=(t.match(/　/g)||[]).length;
+    if(cnt) return {cls:'ng',msg:`全角スペースが ${cnt}個 含まれています（半角に修正）`, ok:false};
+    return {cls:'ok',msg:'全角スペースなし（半角のみ）OK', ok:true};
+  },
+  bulletcount(v){
+    const arr=(v.text||"").split(/\n+/).map(x=>x.trim()).filter(Boolean);
+    if(!arr.length) return {cls:'idle',msg:'箇条書きを1行ずつ入力すると判定します'};
+    if(arr.length>=5) return {cls:'ok',msg:`${arr.length}個（5個以上）OK`, ok:true};
+    return {cls:'ng',msg:`${arr.length}個 — あと${5-arr.length}個必要`, ok:false};
+  },
+  bulletlen(v){
+    const arr=(v.text||"").split(/\n+/).map(x=>x.trim()).filter(Boolean);
+    if(!arr.length) return {cls:'idle',msg:'箇条書きを1行ずつ入力すると各文字数を判定します'};
+    const over=arr.map((s,i)=>({i:i+1,n:[...s].length})).filter(x=>x.n>100);
+    if(over.length) return {cls:'ng',msg:`100文字超：${over.map(o=>`${o.i}行目(${o.n})`).join(' / ')}`, ok:false};
+    const max=Math.max(...arr.map(s=>[...s].length));
+    return {cls:'ok',msg:`全${arr.length}項目が100文字以内（最長${max}文字）OK`, ok:true};
+  },
+  pixel(v){
+    const n=parseInt(v.num,10);
+    if(!n) return {cls:'idle',msg:'長辺のpixel数を入力すると判定します'};
+    if(n>=1500) return {cls:'ok',msg:`${n}px ≥ 1500px（ズーム対応）OK`, ok:true};
+    return {cls:'ng',msg:`${n}px — 1500px未満（ズーム非対応）`, ok:false};
+  },
+  subimg(v){
+    const n=parseInt(v.num,10);
+    if(isNaN(n)) return {cls:'idle',msg:'サブ画像の枚数を入力すると判定します'};
+    if(n>=6) return {cls:'ok',msg:`${n}枚（6枚以上）OK`, ok:true};
+    return {cls:'ng',msg:`${n}枚 — あと${6-n}枚必要`, ok:false};
+  },
+  aplus(v){
+    const n=parseInt(v.num,10);
+    if(isNaN(n)) return {cls:'idle',msg:'A+モジュール数を入力すると判定します'};
+    if(n>=2 && n<=7) return {cls:'ok',msg:`${n}モジュール（複数・最大7内）OK`, ok:true};
+    if(n>7) return {cls:'warn',msg:`${n}モジュール — 最大7を超過`, ok:false};
+    if(n===1) return {cls:'ng',msg:`1モジュール — 複数設定推奨`, ok:false};
+    return {cls:'ng',msg:`未設定（0）`, ok:false};
+  },
+  rating(v){
+    const n=parseFloat(v.num);
+    if(isNaN(n)) return {cls:'idle',msg:'平均★（例 4.2）を入力すると判定します'};
+    if(n>=4) return {cls:'ok',msg:`★${n} ≥ 4.0 OK`, ok:true};
+    return {cls:'ng',msg:`★${n} — 4.0未満（対策が必要）`, ok:false};
+  },
+};
+
+const AUTO_TYPES = Object.keys(AUTO);
+const TEXT_AREA_TYPES = ['kwbytes','kwdup','kwbanned','bulletcount','bulletlen'];
+const TEXT_INPUT_TYPES = ['titlelen','titlespace'];
+const NUM_TYPES = ['pixel','subimg','aplus','rating'];
+
+/* ===== レンダリング ===== */
+const listEl = document.getElementById('list');
+function groupByCat(){
+  const groups=[]; let cur=null;
+  ITEMS.forEach((it,i)=>{
+    if(!cur||cur.cat!==it.cat){cur={cat:it.cat,items:[]};groups.push(cur);}
+    cur.items.push({...it,idx:i});
+  });
+  return groups;
+}
+
+function render(){
+  listEl.innerHTML='';
+  groupByCat().forEach((g,gi)=>{
+    const det=document.createElement('details');det.className='cat';det.open=true;
+    det.innerHTML=`<summary>
+        <span class="chev">▶</span>
+        <span class="cname">${g.cat}</span>
+        <span class="cmini"><span class="pill" data-catpill="${gi}">0/${g.items.length}</span></span>
+      </summary>`;
+    g.items.forEach(it=>{
+      det.appendChild(renderItem(it));
+    });
+    listEl.appendChild(det);
+  });
+  recalc();
+}
+
+function renderItem(it){
+  const i=it.idx; const st=state[i];
+  const auto = AUTO_TYPES.includes(it.type);
+  const el=document.createElement('div');
+  el.className='item';el.dataset.idx=i;
+  let autoHtml='';
+  if(auto){
+    let field='';
+    if(TEXT_AREA_TYPES.includes(it.type)){
+      const ph = it.type.startsWith('kw')?'キーワードを入力（スペース/改行/カンマ区切り）':'箇条書きを1行に1項目で貼り付け';
+      field=`<textarea data-field="text" placeholder="${ph}">${st.data.text||''}</textarea>`;
+      if(it.type==='kwbytes'){
+        field+=`<div class="mini"><label><input type="checkbox" data-field="fashion" ${st.data.fashion?'checked':''}> ファッションカテゴリ（250バイト上限）</label></div>`;
+      }
+    } else if(TEXT_INPUT_TYPES.includes(it.type)){
+      field=`<input type="text" data-field="text" placeholder="商品名を貼り付け" value="${(st.data.text||'').replace(/"/g,'&quot;')}">`;
+    } else if(NUM_TYPES.includes(it.type)){
+      const ph={pixel:'例：1500',subimg:'例：7',aplus:'例：5',rating:'例：4.3'}[it.type];
+      const step=it.type==='rating'?'0.1':'1';
+      field=`<input type="number" data-field="num" step="${step}" min="0" placeholder="${ph}" value="${st.data.num??''}" style="max-width:160px">`;
+    }
+    autoHtml=`<div class="auto">
+        <div class="lbl">自動判定用の入力</div>
+        ${field}
+        <div class="mini">
+          <span class="verdict idle" data-verdict>—</span>
+          <button class="applybtn" data-apply>判定結果を反映</button>
+        </div>
+      </div>`;
+  }
+  el.innerHTML=`
+    <div class="seg">
+      <span class="num">#${i+1}</span>
+      <button class="stbtn" data-cycle title="クリックで OK→NG→${it.naAllowed?'対象外→':''}未評価">○</button>
+    </div>
+    <div class="body">
+      <div class="q">${it.q}${auto?'<span class="badge-auto">自動</span>':'<span class="badge-manual">目視</span>'}</div>
+      ${autoHtml}
+      <input class="note-in" data-note placeholder="メモ（任意）" value="${(st.note||'').replace(/"/g,'&quot;')}">
+    </div>`;
+  applyStatusClass(el,st.status);
+  wireItem(el,it);
+  if(auto) runAuto(el,it);
+  return el;
+}
+
+function applyStatusClass(el,status){
+  el.classList.remove('ok','ng','na');
+  const btn=el.querySelector('[data-cycle]');
+  if(status==='ok'){el.classList.add('ok');btn.textContent='✓';}
+  else if(status==='ng'){el.classList.add('ng');btn.textContent='✕';}
+  else if(status==='na'){el.classList.add('na');btn.textContent='–';}
+  else {btn.textContent='○';}
+}
+
+function wireItem(el,it){
+  const i=it.idx;
+  el.querySelector('[data-cycle]').addEventListener('click',()=>{
+    const order = it.naAllowed?['idle','ok','ng','na']:['idle','ok','ng'];
+    const cur=state[i].status; const next=order[(order.indexOf(cur)+1)%order.length];
+    state[i].status=next; applyStatusClass(el,next); save(); recalc();
+  });
+  const note=el.querySelector('[data-note]');
+  note.addEventListener('input',()=>{state[i].note=note.value;save();});
+  el.querySelectorAll('[data-field]').forEach(f=>{
+    const ev = f.type==='checkbox'?'change':'input';
+    f.addEventListener(ev,()=>{
+      const k=f.dataset.field;
+      state[i].data[k]= f.type==='checkbox'?f.checked:f.value;
+      save(); runAuto(el,it);
+    });
+  });
+  const apply=el.querySelector('[data-apply]');
+  if(apply) apply.addEventListener('click',()=>{
+    const r=runAuto(el,it);
+    if(r && typeof r.ok==='boolean'){state[i].status=r.ok?'ok':'ng';applyStatusClass(el,state[i].status);save();recalc();}
+  });
+}
+
+function runAuto(el,it){
+  const i=it.idx;
+  const r=AUTO[it.type](state[i].data);
+  const v=el.querySelector('[data-verdict]');
+  if(v){v.className='verdict '+(r.cls||'idle');v.textContent=r.msg;}
+  return r;
+}
+
+/* ===== 集計 ===== */
+function recalc(){
+  let ok=0,ng=0,na=0,idle=0;
+  ITEMS.forEach((_,i)=>{const s=state[i].status; if(s==='ok')ok++;else if(s==='ng')ng++;else if(s==='na')na++;else idle++;});
+  const scoringTotal = TOTAL - na;                 // 対象外を除いた母数
+  const per = scoringTotal>0 ? FULL/scoringTotal : 0;
+  const score = Math.round(ok*per);
+  document.getElementById('okCount').textContent=ok;
+  document.getElementById('ngCount').textContent=ng;
+  document.getElementById('idleCount').textContent=idle;
+  document.getElementById('naCount').textContent=na;
+  document.getElementById('ringScore').textContent=score;
+  const pct = FULL>0?Math.round(score/FULL*100):0;
+  const ring=document.getElementById('ring');ring.style.setProperty('--p',pct);
+  document.getElementById('progBar').style.width=pct+'%';
+
+  // grade
+  let g,gc,rc;
+  if(idle===TOTAL){g='未評価';gc='#2a2f3a';rc='var(--sub)';ring.style.setProperty('--ringcol','#3a3f4a');}
+  else if(score>=54){g='優秀（A）';gc='rgba(39,194,129,.18)';rc='var(--ok)';ring.style.setProperty('--ringcol','var(--ok)');}
+  else if(score>=42){g='良好（B）';gc='rgba(245,166,35,.18)';rc='var(--warn)';ring.style.setProperty('--ringcol','var(--amazon)');}
+  else if(score>=30){g='要改善（C）';gc='rgba(245,166,35,.18)';rc='var(--warn)';ring.style.setProperty('--ringcol','var(--warn)');}
+  else {g='要対応（D）';gc='rgba(239,77,90,.18)';rc='var(--ng)';ring.style.setProperty('--ringcol','var(--ng)');}
+  const pill=document.getElementById('gradePill');pill.textContent=g;pill.style.background=gc;pill.style.color=rc;
+  document.getElementById('gradeText').textContent = idle===TOTAL?'評価を始めましょう':`総合評価：${g}`;
+
+  // per-category pills
+  groupByCat().forEach((grp,gi)=>{
+    const done=grp.items.filter(it=>state[it.idx].status==='ok').length;
+    const p=document.querySelector(`[data-catpill="${gi}"]`);
+    if(p)p.textContent=`${done}/${grp.items.length}`;
+  });
+}
+
+/* ===== 永続化 ===== */
+function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(state));}catch(e){}}
+function load(){try{const s=localStorage.getItem(STORE_KEY);if(s){const o=JSON.parse(s);ITEMS.forEach((_,i)=>{if(o[i])state[i]={status:'idle',note:'',data:{},...o[i]};});}}catch(e){}}
+
+/* ===== ツールバー ===== */
+document.getElementById('resetBtn').addEventListener('click',()=>{
+  if(!confirm('すべての評価・入力をリセットします。よろしいですか？'))return;
+  ITEMS.forEach((_,i)=>state[i]={status:'idle',note:'',data:{}});save();render();
+});
+document.getElementById('allokBtn').addEventListener('click',()=>{
+  ITEMS.forEach((_,i)=>{if(state[i].status!=='na')state[i].status='ok';});save();render();
+});
+document.getElementById('copyBtn').addEventListener('click',()=>{
+  const ok=ITEMS.filter((_,i)=>state[i].status==='ok').length;
+  const na=ITEMS.filter((_,i)=>state[i].status==='na').length;
+  const per=(TOTAL-na)>0?FULL/(TOTAL-na):0;const score=Math.round(ok*per);
+  let txt=`【Amazon商品ページ評価】\n`;
+  if(meta.asin){txt+=`ASIN：${meta.asin}\nURL：https://${meta.host||'www.amazon.co.jp'}/dp/${meta.asin}\n`;}
+  txt+=`スコア：${score}/60点（達成 ${ok}/${TOTAL-na} 項目）\n\n■ NG / 未評価の項目\n`;
+  ITEMS.forEach((it,i)=>{const s=state[i].status;if(s==='ng'||s==='idle'){txt+=`・[${s==='ng'?'NG':'未'}] ${it.cat}：${it.q}\n`;}});
+  navigator.clipboard.writeText(txt).then(()=>{
+    const b=document.getElementById('copyBtn');const o=b.textContent;b.textContent='✅ コピーしました';setTimeout(()=>b.textContent=o,1500);
+  });
+});
+
+/* ===== 商品URL / ASIN ===== */
+const META_KEY = "amzPageChecker_meta_v1";
+let meta = {url:'', asin:'', host:''};
+function loadMeta(){try{const s=localStorage.getItem(META_KEY);if(s)meta={...meta,...JSON.parse(s)};}catch(e){}}
+function saveMeta(){try{localStorage.setItem(META_KEY,JSON.stringify(meta));}catch(e){}}
+
+function extractAsin(input){
+  const s=(input||'').trim();
+  if(!s) return null;
+  // URL中の /dp/ /gp/product/ /product/ /ASIN/ パターン
+  let m = s.match(/(?:\/dp\/|\/gp\/product\/|\/gp\/aw\/d\/|\/product\/|\/ASIN\/)([A-Z0-9]{10})/i);
+  if(m) return m[1].toUpperCase();
+  // クエリ ?asin= 形式
+  m = s.match(/[?&]asin=([A-Z0-9]{10})/i);
+  if(m) return m[1].toUpperCase();
+  // 単体ASIN（B0始まり10桁、または10桁英数）
+  m = s.match(/\b(B0[A-Z0-9]{8})\b/i);
+  if(m) return m[1].toUpperCase();
+  m = s.match(/^([A-Z0-9]{10})$/i);
+  if(m) return m[1].toUpperCase();
+  return null;
+}
+function extractHost(input){
+  const m=(input||'').match(/https?:\/\/([^\/\s]+)/i);
+  if(m && /amazon\./i.test(m[1])) return m[1];
+  return 'www.amazon.co.jp';
+}
+
+function renderProduct(){
+  const box=document.getElementById('phInfo');
+  if(!meta.asin){box.style.display='none';box.innerHTML='';return;}
+  const host=meta.host||'www.amazon.co.jp';
+  const dp=`https://${host}/dp/${meta.asin}`;
+  const rev=`https://${host}/product-reviews/${meta.asin}`;
+  box.style.display='block';
+  box.innerHTML=`
+    <div>ASIN：<span class="asin">${meta.asin}</span></div>
+    <div class="links">
+      <a href="${dp}" target="_blank" rel="noopener">🛒 商品ページを開く</a>
+      <a href="${rev}" target="_blank" rel="noopener">⭐ レビュー一覧</a>
+      <a href="${dp}" target="_blank" rel="noopener" onclick="navigator.clipboard&&navigator.clipboard.writeText('${dp}');return true;">🔗 正規URL</a>
+    </div>
+    <div class="mkt">マーケットプレイス：${host}　｜　評価対象として保存済み（印刷・コピーにも反映されます）</div>`;
+}
+
+function loadUrl(){
+  const inp=document.getElementById('urlInput');
+  const val=inp.value;
+  const asin=extractAsin(val);
+  const box=document.getElementById('phInfo');
+  if(!asin){
+    box.style.display='block';
+    box.innerHTML=`<div class="warn-msg">⚠ ASINを抽出できませんでした。</div>
+      <div class="mkt">AmazonのURL（/dp/ABCDEFGHIJ 形式）か、10桁のASIN（B0で始まる等）を貼り付けてください。</div>`;
+    return;
+  }
+  meta.asin=asin; meta.url=val.trim(); meta.host=extractHost(val);
+  saveMeta(); renderProduct();
+}
+
+document.getElementById('urlGo').addEventListener('click',loadUrl);
+document.getElementById('urlInput').addEventListener('keydown',e=>{if(e.key==='Enter')loadUrl();});
+document.getElementById('urlClear').addEventListener('click',()=>{
+  meta={url:'',asin:'',host:''};saveMeta();
+  document.getElementById('urlInput').value='';renderProduct();
+});
+
+/* ===== 起動 ===== */
+loadMeta();
+load();
+render();
+document.getElementById('urlInput').value = meta.url || '';
+renderProduct();
+</script>
+</body>
+</html>
